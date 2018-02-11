@@ -6,7 +6,7 @@ import ExtractTextPlugin from 'extract-text-webpack-plugin';
 import ManifestPlugin from 'webpack-manifest-plugin';
 import SWPrecacheWebpackPlugin from 'sw-precache-webpack-plugin';
 import autoprefixer from 'autoprefixer';
-import { dirname, resolve, join } from 'path';
+import { dirname, resolve, join, extname } from 'path';
 import { existsSync } from 'fs';
 import eslintFormatter from 'react-dev-utils/eslintFormatter';
 import assert from 'assert';
@@ -70,7 +70,9 @@ export default function getConfig(opts = {}) {
       ? {}
       : {
           minimize: !(
-            process.env.NO_COMPRESS || process.env.COMPRESS === 'none'
+            process.env.CSS_COMPRESS === 'none' ||
+            process.env.COMPRESS === 'none' ||
+            process.env.NO_COMPRESS
           ),
           sourceMap: !opts.disableCSSSourceMap,
         }),
@@ -119,9 +121,30 @@ export default function getConfig(opts = {}) {
   }
 
   const cssRules = [
+    ...(opts.cssModulesExcludes
+      ? opts.cssModulesExcludes.map(file => {
+          return {
+            test(filePath) {
+              return filePath.indexOf(file) > -1;
+            },
+            use: getCSSLoader({
+              less: extname(file).toLowerCase() === '.less',
+            }),
+          };
+        })
+      : []),
     {
       test: /\.css$/,
-      exclude: /node_modules/,
+      exclude(filePath) {
+        if (/node_modules/.test(filePath)) {
+          return true;
+        }
+        if (opts.cssModulesExcludes) {
+          for (const exclude of opts.cssModulesExcludes) {
+            if (filePath.indexOf(exclude) > -1) return true;
+          }
+        }
+      },
       use: getCSSLoader({
         cssModules: true,
       }),
@@ -133,7 +156,16 @@ export default function getConfig(opts = {}) {
     },
     {
       test: /\.less$/,
-      exclude: /node_modules/,
+      exclude(filePath) {
+        if (/node_modules/.test(filePath)) {
+          return true;
+        }
+        if (opts.cssModulesExcludes) {
+          for (const exclude of opts.cssModulesExcludes) {
+            if (filePath.indexOf(exclude) > -1) return true;
+          }
+        }
+      },
       use: getCSSLoader({
         cssModules: true,
         less: true,
@@ -376,7 +408,8 @@ export default function getConfig(opts = {}) {
         ...(opts.extraBabelIncludes || []).map(include => {
           return {
             test: /\.(js|jsx)$/,
-            include: join(opts.cwd, include),
+            include:
+              typeof include === 'string' ? join(opts.cwd, include) : include,
             use: babelUse,
           };
         }),
@@ -476,15 +509,6 @@ export default function getConfig(opts = {}) {
           : {}),
         ...stringifyObject(opts.define || {}),
       }),
-      ...(process.env.ANALYZE
-        ? [
-            new BundleAnalyzerPlugin({
-              analyzerMode: 'server',
-              analyzerPort: process.env.ANALYZE_PORT || 8888,
-              openAnalyzer: true,
-            }),
-          ]
-        : []),
       ...(opts.html ? [new HTMLWebpackPlugin(opts.html)] : []),
       new CaseSensitivePathsPlugin(),
       new webpack.LoaderOptionsPlugin({
@@ -498,6 +522,15 @@ export default function getConfig(opts = {}) {
         : []),
       ...commonsPlugins,
       ...copyPlugins,
+      ...(process.env.ANALYZE
+        ? [
+            new BundleAnalyzerPlugin({
+              analyzerMode: 'server',
+              analyzerPort: process.env.ANALYZE_PORT || 8888,
+              openAnalyzer: true,
+            }),
+          ]
+        : []),
     ],
     externals: opts.externals,
     node: {

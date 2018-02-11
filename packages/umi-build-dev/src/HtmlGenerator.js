@@ -4,7 +4,6 @@ import { sync as mkdirp } from 'mkdirp';
 import assert from 'assert';
 import { writeFileSync, existsSync, readFileSync } from 'fs';
 import normalizeEntry from './normalizeEntry';
-import { applyPlugins } from 'umi-plugin';
 
 const debug = require('debug')('umi:HtmlGenerator');
 
@@ -71,7 +70,7 @@ export default class HtmlGenerator {
 
   getContent(opts = {}) {
     const { pageConfig = {}, route = {} } = opts;
-    const { paths, webpackConfig, plugins } = this.service;
+    const { paths, webpackConfig } = this.service;
     const { document, context } = pageConfig;
 
     // e.g.
@@ -134,12 +133,15 @@ export default class HtmlGenerator {
             1}).concat('').join('/')`
         : `'/'`;
     }
-    const inlineScriptContent = `
+    let inlineScriptContent = `
 <script>
   window.routerBase = ${routerBase};
   window.resourceBaseUrl = ${resourceBaseUrl};
 </script>
     `.trim();
+    inlineScriptContent = this.service.applyPlugins('modifyHTMLScript', {
+      initialValue: inlineScriptContent,
+    });
 
     const isDev = process.env.NODE_ENV === 'development';
     const cssFiles = isDev ? [] : this.getCSSFiles(component);
@@ -160,10 +162,11 @@ ${jsContent}
     html = html.replace('</body>', `${injectContent}\r\n</body>`);
 
     // 插件最后处理一遍 HTML
-    // Usage:
-    // - umi-plugin-yunfengdie
-    html = applyPlugins(plugins, 'generateHTML', html, {
-      route,
+    html = this.service.applyPlugins('modifyHTML', {
+      initialValue: html,
+      args: {
+        route,
+      },
     });
 
     return `${html}\r\n`;

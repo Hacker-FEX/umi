@@ -68,11 +68,15 @@ describe('build', () => {
           {
             cwd,
             outputPath: join(cwd, 'dist'),
-            disableCSSModules: true,
+            disableCSSModules: dir.indexOf('cssModulesExcludes') === -1,
           },
           () => {
-            assertBuildResult(cwd);
-            done();
+            try {
+              assertBuildResult(cwd);
+              done();
+            } catch (e) {
+              done(e);
+            }
           },
         );
       });
